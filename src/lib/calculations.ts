@@ -1,4 +1,4 @@
-import { ActivityLevel } from "../types";
+import { ActivityLevel, UserGoal } from "../types";
 
 export const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
   sedentary: 1.2,      // Pouco ou nenhum exercício
@@ -18,6 +18,27 @@ export function calculateBMR(weight: number, height: number, age: number, gender
 
 export function calculateTDEE(bmr: number, activityLevel: ActivityLevel): number {
   return Math.round(bmr * ACTIVITY_MULTIPLIERS[activityLevel]);
+}
+
+export function calculateGoalCalories(tdee: number, bmr: number, goal: UserGoal): number {
+  let targetCalories = tdee;
+
+  if (goal === 'loss') {
+    // Déficit de 15% (média entre 10-20%)
+    const deficit = tdee * 0.15;
+    targetCalories = tdee - deficit;
+
+    // Trava de segurança: Não baixar da TMB (Basal)
+    if (targetCalories < bmr) {
+      targetCalories = bmr;
+    }
+  } else if (goal === 'gain') {
+    // Superávit de 15% (média entre 10-20%)
+    const surplus = tdee * 0.15;
+    targetCalories = tdee + surplus;
+  }
+
+  return Math.round(targetCalories);
 }
 
 export const WORKOUT_TYPES = [

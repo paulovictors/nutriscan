@@ -1,4 +1,5 @@
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active';
+export type UserGoal = 'loss' | 'gain';
 
 export interface UserProfile {
   id?: string; // Supabase User ID
@@ -9,6 +10,7 @@ export interface UserProfile {
   height: number; // cm
   gender: 'male' | 'female';
   activityLevel: ActivityLevel;
+  goal?: UserGoal; // Novo campo
   bmr: number;
   dailyCalorieGoal: number;
   isOnboarded: boolean;

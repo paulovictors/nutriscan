@@ -4,10 +4,10 @@ import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Logo } from '../components/ui/Logo';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Info } from 'lucide-react';
 
 export function Login() {
-  const { login } = useApp();
+  const { login, isDemoMode } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,18 +20,23 @@ export function Login() {
 
     try {
       await login(email, password);
-      // Não fazemos navigate() aqui.
-      // O AppContext vai detetar o login e o App.tsx vai redirecionar automaticamente.
+      // O redirecionamento acontece automaticamente pelo AppContext/Routes
     } catch (err: any) {
-      console.error("Login error:", err);
-      setLoading(false); // Só paramos o loading se der erro. Se for sucesso, o componente será desmontado.
+      // Log apenas como aviso para credenciais inválidas, erro para outros casos
+      if (err.code === 'invalid_credentials') {
+        console.warn("Tentativa de login falhou: Credenciais inválidas");
+      } else {
+        console.error("Erro no login:", err);
+      }
+      
+      setLoading(false);
       
       if (
         err.code === 'invalid_credentials' || 
         err.message.includes('Invalid login credentials') ||
         err.message.includes('Invalid login')
       ) {
-        setError("Email ou palavra-passe incorretos.");
+        setError("Credenciais inválidas. Se criou conta no modo de teste, por favor registe-se novamente.");
       } else if (
         err.code === 'email_not_confirmed' || 
         err.message.includes('Email not confirmed')
@@ -50,6 +55,16 @@ export function Login() {
         <h1 className="text-2xl font-bold text-gray-900">Bem-vindo de volta</h1>
         <p className="text-gray-500 mt-2">Aceda à sua dieta personalizada.</p>
       </div>
+
+      {isDemoMode && (
+        <div className="mb-6 p-4 bg-blue-50 text-blue-800 rounded-xl text-sm flex items-start gap-3 border border-blue-100">
+          <Info size={18} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <span className="font-bold block mb-1">Modo de Demonstração</span>
+            Login simulado (sem backend). Pode usar qualquer email/senha.
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleLogin} className="space-y-4">
         {error && (

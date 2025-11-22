@@ -3,20 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { ActivityLevel } from '../types';
+import { ActivityLevel, UserGoal } from '../types';
+import { calculateBMR, calculateTDEE, calculateGoalCalories } from '../lib/calculations';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, LogOut, TrendingDown, TrendingUp, Target } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
 
 const steps = [
   { id: 'personal', title: 'Sobre Você', description: 'Vamos configurar o seu perfil.' },
   { id: 'body', title: 'Medidas Corporais', description: 'Para calcularmos suas necessidades.' },
   { id: 'activity', title: 'Nível de Atividade', description: 'Como é o seu dia a dia?' },
+  { id: 'goal', title: 'O Seu Objetivo', description: 'O que deseja alcançar?' },
 ];
 
 export function Onboarding() {
   const navigate = useNavigate();
-  const { saveProfileData } = useApp();
+  const { saveProfileData, logout } = useApp();
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -27,6 +29,7 @@ export function Onboarding() {
     weight: '',
     height: '',
     activityLevel: 'sedentary' as ActivityLevel,
+    goal: 'loss' as UserGoal,
   });
 
   const handleNext = async () => {
@@ -35,16 +38,26 @@ export function Onboarding() {
     } else {
       setIsLoading(true);
       try {
+        // Cálculos finais antes de salvar
+        const weight = Number(formData.weight);
+        const height = Number(formData.height);
+        const age = Number(formData.age);
+        
+        const bmr = calculateBMR(weight, height, age, formData.gender);
+        const tdee = calculateTDEE(bmr, formData.activityLevel);
+        const dailyCalorieGoal = calculateGoalCalories(tdee, bmr, formData.goal);
+
         await saveProfileData({
           name: formData.name,
-          age: Number(formData.age),
+          age: age,
           gender: formData.gender,
-          weight: Number(formData.weight),
-          height: Number(formData.height),
+          weight: weight,
+          height: height,
           activityLevel: formData.activityLevel,
+          goal: formData.goal,
+          dailyCalorieGoal: dailyCalorieGoal // Passamos o valor calculado explicitamente
         });
         // O redirecionamento para home acontece automaticamente via App.tsx
-        // quando o user.isOnboarded muda para true
       } catch (error) {
         console.error(error);
         alert("Erro ao salvar perfil. Tente novamente.");
@@ -58,16 +71,41 @@ export function Onboarding() {
     if (currentStep > 0) setCurrentStep(c => c - 1);
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
   const isValid = () => {
     if (currentStep === 0) return formData.name && formData.age;
     if (currentStep === 1) return formData.weight && formData.height;
     return true;
   };
 
+  // Preview do cálculo para o último passo
+  const getCaloriePreview = () => {
+    const weight = Number(formData.weight);
+    const height = Number(formData.height);
+    const age = Number(formData.age);
+    if (!weight || !height || !age) return 0;
+
+    const bmr = calculateBMR(weight, height, age, formData.gender);
+    const tdee = calculateTDEE(bmr, formData.activityLevel);
+    return calculateGoalCalories(tdee, bmr, formData.goal);
+  };
+
   return (
-    <div className="min-h-screen bg-white flex flex-col max-w-md mx-auto p-6">
-      <div className="flex justify-center mb-6">
+    <div className="min-h-screen bg-white flex flex-col max-w-md mx-auto p-6 relative">
+      {/* Header com Logo e Botão de Sair */}
+      <div className="flex justify-between items-center mb-6">
         <Logo size="sm" />
+        <button 
+          onClick={handleLogout}
+          className="text-xs text-gray-500 hover:text-red-500 flex items-center gap-1 font-medium transition-colors"
+        >
+          <LogOut size={14} />
+          Sair
+        </button>
       </div>
 
       <div className="flex-1 flex flex-col justify-center">
@@ -166,6 +204,57 @@ export function Onboarding() {
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {currentStep === 3 && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-4">
+                  <button
+                    onClick={() => setFormData({...formData, goal: 'loss'})}
+                    className={`p-6 rounded-2xl border-2 text-left transition-all relative overflow-hidden ${formData.goal === 'loss' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    <div className="flex items-start justify-between relative z-10">
+                      <div>
+                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 text-emerald-600">
+                          <TrendingDown size={20} />
+                        </div>
+                        <h3 className="font-bold text-lg text-gray-900">Emagrecimento</h3>
+                        <p className="text-sm text-gray-500 mt-1">Déficit calórico saudável para perder gordura mantendo energia.</p>
+                      </div>
+                      {formData.goal === 'loss' && <div className="bg-emerald-500 text-white p-1 rounded-full"><Check size={16} /></div>}
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setFormData({...formData, goal: 'gain'})}
+                    className={`p-6 rounded-2xl border-2 text-left transition-all relative overflow-hidden ${formData.goal === 'gain' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    <div className="flex items-start justify-between relative z-10">
+                      <div>
+                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 text-emerald-600">
+                          <TrendingUp size={20} />
+                        </div>
+                        <h3 className="font-bold text-lg text-gray-900">Ganho de Massa</h3>
+                        <p className="text-sm text-gray-500 mt-1">Superávit calórico controlado para construção muscular.</p>
+                      </div>
+                      {formData.goal === 'gain' && <div className="bg-emerald-500 text-white p-1 rounded-full"><Check size={16} /></div>}
+                    </div>
+                  </button>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center">
+                  <div className="flex items-center justify-center gap-2 text-gray-500 text-sm mb-1">
+                    <Target size={16} />
+                    <span>Meta Estimada</span>
+                  </div>
+                  <p className="text-3xl font-bold text-emerald-600">
+                    {getCaloriePreview()} <span className="text-sm font-medium text-gray-400">kcal/dia</span>
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Baseado no seu metabolismo e objetivo.
+                  </p>
+                </div>
               </div>
             )}
           </motion.div>

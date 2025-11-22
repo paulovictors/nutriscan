@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/Button';
-import { analyzeFoodImage } from '../lib/openai';
-import { Camera, Upload, Check, X, Sparkles, ScanLine, AlertCircle, KeyRound } from 'lucide-react';
+import { analyzeFoodImage } from '../lib/gemini'; // Alterado para Gemini
+import { Camera, Upload, Check, X, Sparkles, ScanLine, AlertTriangle, RefreshCw, Headset } from 'lucide-react';
 import { Meal } from '../types';
 import { motion } from 'framer-motion';
 
@@ -20,33 +20,42 @@ export function Scan() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validar tamanho (max 4MB para evitar custos altos/limites)
+      // Validar tamanho (max 4MB)
       if (file.size > 4 * 1024 * 1024) {
-        setError("A imagem é muito grande. Tente uma menor que 4MB.");
+        setError("A imagem é muito grande (Máx 4MB). Por favor, escolha uma menor.");
         return;
       }
 
       const reader = new FileReader();
+      
+      reader.onloadstart = () => {
+        setIsAnalyzing(true);
+        setError(null);
+      };
+
       reader.onloadend = () => {
         const base64 = reader.result as string;
         setImage(base64);
-        setError(null);
         runAnalysis(base64);
       };
+
+      reader.onerror = () => {
+        setError("Erro ao ler o ficheiro. Tente novamente.");
+        setIsAnalyzing(false);
+      };
+
       reader.readAsDataURL(file);
     }
   };
 
   const runAnalysis = async (imgData: string) => {
-    setIsAnalyzing(true);
-    setError(null);
-    
     try {
       const mealData = await analyzeFoodImage(imgData);
       setResult(mealData);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Não foi possível analisar a imagem. Tente novamente.");
+      // Mensagem padrão solicitada pelo usuário
+      setError("Ocorreu um erro ao processar a sua solicitação.");
       setResult(null);
     } finally {
       setIsAnalyzing(false);
@@ -64,23 +73,31 @@ export function Scan() {
     setImage(null);
     setResult(null);
     setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleGoHome = () => {
+    navigate('/');
   };
 
   // Tela de Carregamento / Análise
   if (image && isAnalyzing) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        <img src={image} alt="Scanning" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+        <img src={image} alt="Scanning" className="absolute inset-0 w-full h-full object-cover opacity-30 blur-sm" />
         <div className="relative z-10 flex flex-col items-center">
           <motion.div 
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            className="mb-6"
+            className="mb-6 relative"
           >
-            <ScanLine size={64} className="text-emerald-400" />
+            <div className="absolute inset-0 bg-emerald-500 blur-xl opacity-20 rounded-full"></div>
+            <ScanLine size={64} className="text-emerald-400 relative z-10" />
           </motion.div>
-          <h2 className="text-2xl font-bold text-white mb-2">Consultando a IA...</h2>
-          <p className="text-gray-300 text-center max-w-xs">Estamos a identificar os ingredientes e a calcular as calorias.</p>
+          <h2 className="text-2xl font-bold text-white mb-2">A analisar alimento...</h2>
+          <p className="text-gray-300 text-center max-w-xs text-sm">A nossa IA (Nutricionista) está a identificar os ingredientes e nutrientes.</p>
         </div>
         
         <motion.div 
@@ -92,52 +109,80 @@ export function Scan() {
     );
   }
 
+  // Tela de Erro Personalizada (Solicitada pelo Usuário)
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+        <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center mb-6 shadow-sm border border-amber-100">
+          <Headset size={40} className="text-amber-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Atenção</h2>
+        <p className="text-gray-500 mb-8 max-w-xs leading-relaxed">
+          Ocorreu uma falha na comunicação com a IA. Por favor, entre em contato com o suporte do aplicativo e tente novamente mais tarde.
+        </p>
+        
+        <div className="w-full max-w-xs space-y-3">
+          <Button onClick={handleGoHome} className="w-full h-14 text-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-100">
+            OK
+          </Button>
+          <Button variant="ghost" onClick={handleRetake} className="w-full text-gray-400 text-sm">
+            Tentar Novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // Tela de Resultados
   if (result && image) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex flex-col">
-        <div className="relative h-64 -mx-6 -mt-6 mb-6">
+        <div className="relative h-64 -mx-6 -mt-6 mb-6 group">
           <img src={image} alt="Result" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-6">
             <div>
-              <div className="flex items-center gap-2 text-emerald-400 mb-1">
-                <Sparkles size={16} />
-                <span className="text-xs font-bold uppercase tracking-wider">Análise IA Concluída</span>
+              <div className="flex items-center gap-2 text-emerald-400 mb-2 bg-black/30 backdrop-blur-md w-fit px-3 py-1 rounded-full border border-white/10">
+                <Sparkles size={14} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Análise Nutricional</span>
               </div>
-              <h1 className="text-2xl font-bold text-white">{result.name}</h1>
+              <h1 className="text-2xl font-bold text-white leading-tight">{result.name}</h1>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-          <p className="text-gray-600 mb-6 text-sm leading-relaxed">{result.description}</p>
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-6 -mt-12 relative z-10">
+          <p className="text-gray-600 mb-6 text-sm leading-relaxed border-b border-gray-100 pb-4">
+            {result.description}
+          </p>
           
           <div className="grid grid-cols-4 gap-2 mb-6">
-            <div className="bg-gray-50 p-3 rounded-xl text-center">
-              <p className="text-xs text-gray-500 mb-1">Kcal</p>
-              <p className="font-bold text-gray-900">{result.calories}</p>
+            <div className="bg-gray-50 p-3 rounded-2xl text-center border border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Calorias</p>
+              <p className="font-bold text-gray-900 text-lg">{result.calories}</p>
             </div>
-            <div className="bg-emerald-50 p-3 rounded-xl text-center">
-              <p className="text-xs text-emerald-700 mb-1">Prot</p>
-              <p className="font-bold text-emerald-900">{result.macros.protein}g</p>
+            <div className="bg-emerald-50 p-3 rounded-2xl text-center border border-emerald-100">
+              <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Prot</p>
+              <p className="font-bold text-emerald-900 text-lg">{result.macros.protein}g</p>
             </div>
-            <div className="bg-blue-50 p-3 rounded-xl text-center">
-              <p className="text-xs text-blue-700 mb-1">Carb</p>
-              <p className="font-bold text-blue-900">{result.macros.carbs}g</p>
+            <div className="bg-blue-50 p-3 rounded-2xl text-center border border-blue-100">
+              <p className="text-[10px] font-bold text-blue-600 uppercase mb-1">Carb</p>
+              <p className="font-bold text-blue-900 text-lg">{result.macros.carbs}g</p>
             </div>
-            <div className="bg-amber-50 p-3 rounded-xl text-center">
-              <p className="text-xs text-amber-700 mb-1">Gord</p>
-              <p className="font-bold text-amber-900">{result.macros.fat}g</p>
+            <div className="bg-amber-50 p-3 rounded-2xl text-center border border-amber-100">
+              <p className="text-[10px] font-bold text-amber-600 uppercase mb-1">Gord</p>
+              <p className="font-bold text-amber-900 text-lg">{result.macros.fat}g</p>
             </div>
           </div>
 
           {result.micros && Object.keys(result.micros).length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Micronutrientes Principais</h3>
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                <ScanLine size={12} /> Detalhes Adicionais
+              </h3>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(result.micros).map(([key, value]) => (
-                  <span key={key} className="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600 font-medium capitalize">
-                    {key}: {value}
+                  <span key={key} className="px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600 font-medium capitalize">
+                    <span className="text-gray-400 mr-1">{key}:</span> {value}
                   </span>
                 ))}
               </div>
@@ -146,10 +191,10 @@ export function Scan() {
         </div>
 
         <div className="mt-auto flex gap-4">
-          <Button variant="outline" onClick={handleRetake} className="flex-1">
+          <Button variant="outline" onClick={handleRetake} className="flex-1 h-12 rounded-xl">
             <X className="mr-2 w-4 h-4" /> Cancelar
           </Button>
-          <Button onClick={handleSave} className="flex-1">
+          <Button onClick={handleSave} className="flex-1 h-12 rounded-xl shadow-lg shadow-emerald-200">
             <Check className="mr-2 w-4 h-4" /> Registar
           </Button>
         </div>
@@ -161,28 +206,19 @@ export function Scan() {
   return (
     <div className="min-h-screen bg-white p-6 flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
-        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-          <Camera size={32} className="text-emerald-600" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Escanear Refeição</h1>
-          <p className="text-gray-500 max-w-xs mx-auto">Tire uma foto do seu prato e deixe a nossa IA calcular as calorias e nutrientes.</p>
-        </div>
-
-        {/* Exibição de Erros */}
-        {error && (
-          <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-start gap-3 text-left w-full max-w-xs animate-in fade-in slide-in-from-bottom-2">
-            {error.includes('chave') ? (
-              <KeyRound className="text-red-500 flex-shrink-0 mt-0.5" size={18} />
-            ) : (
-              <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={18} />
-            )}
-            <div className="flex-1">
-              <p className="text-sm text-red-700 font-medium">Erro na Análise</p>
-              <p className="text-xs text-red-600 mt-1">{error}</p>
-            </div>
+        <div className="relative">
+          <div className="absolute inset-0 bg-emerald-200 blur-2xl opacity-30 rounded-full"></div>
+          <div className="w-24 h-24 bg-emerald-50 rounded-3xl flex items-center justify-center mb-4 relative border border-emerald-100 shadow-sm">
+            <Camera size={40} className="text-emerald-600" strokeWidth={1.5} />
           </div>
-        )}
+        </div>
+        
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-3">Escanear Refeição</h1>
+          <p className="text-gray-500 max-w-xs mx-auto leading-relaxed">
+            Tire uma foto do seu prato. A nossa IA identifica os ingredientes e calcula as calorias para si.
+          </p>
+        </div>
         
         <div className="w-full max-w-xs space-y-4 pt-8">
           <input 
@@ -194,7 +230,7 @@ export function Scan() {
           />
           
           <Button 
-            className="w-full h-14 text-lg" 
+            className="w-full h-14 text-lg shadow-xl shadow-emerald-100 transition-transform active:scale-95" 
             onClick={() => fileInputRef.current?.click()}
           >
             <Camera className="mr-2" /> Tirar Foto
@@ -202,7 +238,7 @@ export function Scan() {
           
           <Button 
             variant="outline" 
-            className="w-full"
+            className="w-full h-14 text-base border-2 border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-colors"
             onClick={() => fileInputRef.current?.click()}
           >
             <Upload className="mr-2 w-4 h-4" /> Carregar da Galeria

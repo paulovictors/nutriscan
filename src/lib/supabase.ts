@@ -14,9 +14,17 @@ const isValidUrl = (url: string | undefined): boolean => {
   }
 };
 
-// Se a URL do ambiente for válida, usa-a. Caso contrário, usa um placeholder seguro.
-// Isso impede o erro "Invalid supabaseUrl" que crasha a aplicação.
-const supabaseUrl = isValidUrl(envUrl) ? envUrl : 'https://placeholder.supabase.co';
-const supabaseKey = envKey && envKey.trim().length > 0 ? envKey : 'placeholder-key';
+// Verifica se as variáveis de ambiente estão configuradas corretamente
+// Consideramos "não configurado" se estiver vazio, undefined ou se for o placeholder padrão
+export const isSupabaseConfigured = 
+  isValidUrl(envUrl) && 
+  envKey && 
+  envKey.trim().length > 0 && 
+  !envUrl?.includes('placeholder');
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Se a URL do ambiente for válida, usa-a. Caso contrário, usa um placeholder seguro.
+const supabaseUrl = isSupabaseConfigured ? envUrl : 'https://placeholder.supabase.co';
+const supabaseKey = isSupabaseConfigured ? envKey : 'placeholder-key';
+
+// Exporta o cliente. Se não estiver configurado, as chamadas falharão (o que tratamos no AppContext)
+export const supabase = createClient(supabaseUrl!, supabaseKey!);

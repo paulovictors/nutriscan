@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { Layout } from './components/Layout';
@@ -10,22 +10,12 @@ import { Scan } from './pages/Scan';
 import { Workouts } from './pages/Workouts';
 import { History } from './pages/History';
 import { Profile } from './pages/Profile';
-import { Loader2 } from 'lucide-react';
-
-// Componente de Loading Global
-function LoadingScreen() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-white">
-      <Loader2 className="animate-spin text-emerald-600" size={40} />
-    </div>
-  );
-}
+import { SplashScreen } from './components/SplashScreen';
+import { AnimatePresence } from 'framer-motion';
 
 // Rota Protegida: Só acessível se logado E com perfil completo
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useApp();
-  
-  if (isLoading) return <LoadingScreen />;
+  const { user } = useApp();
   
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -40,9 +30,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Rota de Onboarding: Só acessível se logado mas SEM perfil
 function OnboardingRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useApp();
-
-  if (isLoading) return <LoadingScreen />;
+  const { user } = useApp();
 
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -57,11 +45,7 @@ function OnboardingRoute({ children }: { children: React.ReactNode }) {
 
 // Rota Pública: Só acessível se NÃO estiver logado
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useApp();
-
-  // IMPORTANTE: Se estiver carregando, mostramos o spinner para evitar "piscar" a tela de login
-  // antes de redirecionar o usuário logado.
-  if (isLoading) return <LoadingScreen />;
+  const { user } = useApp();
 
   if (user) {
     return <Navigate to={user.isOnboarded ? "/" : "/onboarding"} replace />;
@@ -91,12 +75,41 @@ function AppRoutes() {
   );
 }
 
+function AppContent() {
+  const { isLoading } = useApp();
+  const [showSplash, setShowSplash] = useState(true);
+
+  // Callback chamado pela SplashScreen quando a animação de 100% termina
+  const handleSplashComplete = useCallback(() => {
+    setShowSplash(false);
+  }, []);
+
+  return (
+    <>
+      <AnimatePresence mode="wait">
+        {showSplash && (
+          <SplashScreen 
+            key="splash" 
+            isAppReady={!isLoading} 
+            onAnimationComplete={handleSplashComplete}
+          />
+        )}
+      </AnimatePresence>
+      
+      {/* Renderiza a app apenas quando o splash terminar para evitar flashes */}
+      {!showSplash && (
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      )}
+    </>
+  );
+}
+
 function App() {
   return (
     <AppProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <AppContent />
     </AppProvider>
   );
 }
