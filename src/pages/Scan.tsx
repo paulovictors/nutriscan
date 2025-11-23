@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/Button';
-import { analyzeFoodImage } from '../lib/gemini'; // Alterado para Gemini
-import { Camera, Upload, Check, X, Sparkles, ScanLine, AlertTriangle, RefreshCw, Headset } from 'lucide-react';
+import { analyzeFoodImage } from '../lib/openai'; 
+import { Camera, Upload, Check, X, Sparkles, ScanLine, Headset, Loader2 } from 'lucide-react';
 import { Meal } from '../types';
 import { motion } from 'framer-motion';
 
@@ -16,13 +16,13 @@ export function Scan() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<Meal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validar tamanho (max 4MB)
-      if (file.size > 4 * 1024 * 1024) {
-        setError("A imagem é muito grande (Máx 4MB). Por favor, escolha uma menor.");
+      if (file.size > 5 * 1024 * 1024) {
+        setError("A imagem é muito grande (Máx 5MB).");
         return;
       }
 
@@ -40,7 +40,7 @@ export function Scan() {
       };
 
       reader.onerror = () => {
-        setError("Erro ao ler o ficheiro. Tente novamente.");
+        setError("Erro ao ler o ficheiro.");
         setIsAnalyzing(false);
       };
 
@@ -54,18 +54,26 @@ export function Scan() {
       setResult(mealData);
     } catch (err: any) {
       console.error(err);
-      // Mensagem padrão solicitada pelo usuário
-      setError("Ocorreu um erro ao processar a sua solicitação.");
+      setError("Não foi possível identificar o alimento. Tente uma foto mais clara.");
       setResult(null);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (result) {
-      addMeal(result);
-      navigate('/');
+      setIsSaving(true);
+      try {
+        await addMeal(result);
+        // Pequeno delay para garantir atualização do estado
+        setTimeout(() => {
+           navigate('/');
+        }, 500);
+      } catch (e) {
+        console.error("Erro ao salvar", e);
+        setIsSaving(false);
+      }
     }
   };
 
@@ -73,6 +81,7 @@ export function Scan() {
     setImage(null);
     setResult(null);
     setError(null);
+    setIsSaving(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -82,7 +91,6 @@ export function Scan() {
     navigate('/');
   };
 
-  // Tela de Carregamento / Análise
   if (image && isAnalyzing) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -96,8 +104,8 @@ export function Scan() {
             <div className="absolute inset-0 bg-emerald-500 blur-xl opacity-20 rounded-full"></div>
             <ScanLine size={64} className="text-emerald-400 relative z-10" />
           </motion.div>
-          <h2 className="text-2xl font-bold text-white mb-2">A analisar alimento...</h2>
-          <p className="text-gray-300 text-center max-w-xs text-sm">A nossa IA (Nutricionista) está a identificar os ingredientes e nutrientes.</p>
+          <h2 className="text-2xl font-bold text-white mb-2">A analisar refeição...</h2>
+          <p className="text-gray-300 text-center max-w-xs text-sm">A identificar ingredientes e nutrientes.</p>
         </div>
         
         <motion.div 
@@ -109,21 +117,20 @@ export function Scan() {
     );
   }
 
-  // Tela de Erro Personalizada (Solicitada pelo Usuário)
   if (error) {
     return (
       <div className="min-h-screen bg-white p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
         <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center mb-6 shadow-sm border border-amber-100">
           <Headset size={40} className="text-amber-500" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Atenção</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Ups!</h2>
         <p className="text-gray-500 mb-8 max-w-xs leading-relaxed">
-          Ocorreu uma falha na comunicação com a IA. Por favor, entre em contato com o suporte do aplicativo e tente novamente mais tarde.
+          {error}
         </p>
         
         <div className="w-full max-w-xs space-y-3">
-          <Button onClick={handleGoHome} className="w-full h-14 text-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-100">
-            OK
+          <Button onClick={handleGoHome} className="w-full h-14 text-lg bg-emerald-600 hover:bg-emerald-700 text-white">
+            Voltar ao Início
           </Button>
           <Button variant="ghost" onClick={handleRetake} className="w-full text-gray-400 text-sm">
             Tentar Novamente
@@ -133,10 +140,9 @@ export function Scan() {
     );
   }
 
-  // Tela de Resultados
   if (result && image) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6 flex flex-col">
+      <div className="min-h-screen bg-gray-50 p-6 flex flex-col pb-24">
         <div className="relative h-64 -mx-6 -mt-6 mb-6 group">
           <img src={image} alt="Result" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-6">
@@ -161,15 +167,16 @@ export function Scan() {
               <p className="font-bold text-gray-900 text-lg">{result.calories}</p>
             </div>
             <div className="bg-emerald-50 p-3 rounded-2xl text-center border border-emerald-100">
-              <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Prot</p>
+              <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Proteínas</p>
               <p className="font-bold text-emerald-900 text-lg">{result.macros.protein}g</p>
             </div>
             <div className="bg-blue-50 p-3 rounded-2xl text-center border border-blue-100">
-              <p className="text-[10px] font-bold text-blue-600 uppercase mb-1">Carb</p>
+              {/* CORREÇÃO: Alterado de Hidratos para Carboidratos */}
+              <p className="text-[10px] font-bold text-blue-600 uppercase mb-1">Carboidratos</p>
               <p className="font-bold text-blue-900 text-lg">{result.macros.carbs}g</p>
             </div>
             <div className="bg-amber-50 p-3 rounded-2xl text-center border border-amber-100">
-              <p className="text-[10px] font-bold text-amber-600 uppercase mb-1">Gord</p>
+              <p className="text-[10px] font-bold text-amber-600 uppercase mb-1">Gorduras</p>
               <p className="font-bold text-amber-900 text-lg">{result.macros.fat}g</p>
             </div>
           </div>
@@ -190,11 +197,11 @@ export function Scan() {
           )}
         </div>
 
-        <div className="mt-auto flex gap-4">
-          <Button variant="outline" onClick={handleRetake} className="flex-1 h-12 rounded-xl">
+        <div className="mt-auto flex gap-4 z-20">
+          <Button variant="outline" onClick={handleRetake} className="flex-1 h-12 rounded-xl" disabled={isSaving}>
             <X className="mr-2 w-4 h-4" /> Cancelar
           </Button>
-          <Button onClick={handleSave} className="flex-1 h-12 rounded-xl shadow-lg shadow-emerald-200">
+          <Button onClick={handleSave} className="flex-1 h-12 rounded-xl shadow-lg shadow-emerald-200" isLoading={isSaving}>
             <Check className="mr-2 w-4 h-4" /> Registar
           </Button>
         </div>
@@ -202,7 +209,6 @@ export function Scan() {
     );
   }
 
-  // Tela Inicial
   return (
     <div className="min-h-screen bg-white p-6 flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
@@ -214,9 +220,9 @@ export function Scan() {
         </div>
         
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">Escanear Refeição</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-3">Registar Refeição</h1>
           <p className="text-gray-500 max-w-xs mx-auto leading-relaxed">
-            Tire uma foto do seu prato. A nossa IA identifica os ingredientes e calcula as calorias para si.
+            Tire uma foto do seu prato. A nossa app identifica os ingredientes e calcula as calorias automaticamente.
           </p>
         </div>
         

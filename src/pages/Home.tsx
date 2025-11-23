@@ -16,10 +16,36 @@ export function Home() {
   const remainingCalories = user.dailyCalorieGoal - stats.netCalories;
   const progress = Math.min(100, (stats.netCalories / user.dailyCalorieGoal) * 100);
 
+  // Cálculo de Metas de Macros (Estimativa Padrão)
+  const goalProtein = Math.round((user.dailyCalorieGoal * 0.3) / 4);
+  const goalCarbs = Math.round((user.dailyCalorieGoal * 0.4) / 4);
+  const goalFat = Math.round((user.dailyCalorieGoal * 0.3) / 9);
+
   const macroData = [
-    { name: 'Proteína', value: stats.protein, color: '#10b981', icon: Beef, label: 'Proteína' },
-    { name: 'Carbos', value: stats.carbs, color: '#3b82f6', icon: Wheat, label: 'Carbos' },
-    { name: 'Gordura', value: stats.fat, color: '#f59e0b', icon: Droplets, label: 'Gordura' },
+    { 
+      name: 'Proteína', 
+      value: stats.protein, 
+      goal: goalProtein,
+      color: '#10b981', 
+      icon: Beef, 
+      label: 'Proteínas' 
+    },
+    { 
+      name: 'Carbos', 
+      value: stats.carbs, 
+      goal: goalCarbs,
+      color: '#3b82f6', 
+      icon: Wheat, 
+      label: 'Carboidratos' 
+    },
+    { 
+      name: 'Gordura', 
+      value: stats.fat, 
+      goal: goalFat,
+      color: '#f59e0b', 
+      icon: Droplets, 
+      label: 'Gorduras' 
+    },
   ];
 
   return (
@@ -30,7 +56,7 @@ export function Home() {
           <p className="text-gray-500 text-sm">Olá, {user.name}</p>
           <h1 className="text-2xl font-bold text-gray-900">Resumo de Hoje</h1>
         </div>
-        <div className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-medium">
+        <div className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-medium capitalize">
           {format(today, "d 'de' MMMM", { locale: pt })}
         </div>
       </div>
@@ -90,22 +116,36 @@ export function Home() {
       {/* Macros */}
       <div>
         <h3 className="font-bold text-gray-900 mb-4">Macronutrientes</h3>
-        <div className="grid grid-cols-3 gap-4">
-          {macroData.map((macro) => (
-            <div key={macro.name} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <macro.icon size={16} color={macro.color} />
-                <span className="text-xs font-medium text-gray-500">{macro.label}</span>
+        <div className="grid grid-cols-3 gap-3">
+          {macroData.map((macro) => {
+            const percentage = macro.goal > 0 ? Math.min(100, (macro.value / macro.goal) * 100) : 0;
+            
+            return (
+              <div key={macro.name} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between h-full">
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-2 rounded-xl bg-gray-50">
+                      {/* Ícone aumentado para 32px para melhor visibilidade mobile */}
+                      <macro.icon size={32} color={macro.color} className="flex-shrink-0" />
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold text-gray-600 block mb-1">{macro.label}</span>
+                  <p className="text-xl font-bold text-gray-900">{Math.round(macro.value)}g</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">de {macro.goal}g</p>
+                </div>
+                
+                <div className="w-full bg-gray-100 h-2 rounded-full mt-4 overflow-hidden">
+                  <div 
+                    className="h-full rounded-full transition-all duration-500 ease-out" 
+                    style={{ 
+                      width: `${percentage}%`, 
+                      backgroundColor: macro.color 
+                    }} 
+                  />
+                </div>
               </div>
-              <p className="text-xl font-bold text-gray-900">{Math.round(macro.value)}g</p>
-              <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                <div 
-                  className="h-full rounded-full" 
-                  style={{ width: '50%', backgroundColor: macro.color }} 
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -138,13 +178,17 @@ export function Home() {
                     <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Foto</div>
                   )}
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-gray-900 text-sm">{meal.name}</h4>
-                  <p className="text-xs text-gray-500 line-clamp-1">{meal.description}</p>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-gray-900 text-sm truncate">{meal.name}</h4>
+                  <p className="text-xs text-gray-500 truncate">{meal.description}</p>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <p className="font-bold text-emerald-600 text-sm">{meal.calories} kcal</p>
-                  <p className="text-[10px] text-gray-400 capitalize">{meal.type}</p>
+                  <p className="text-[10px] text-gray-400 capitalize">
+                    {meal.type === 'breakfast' ? 'Pequeno-almoço' : 
+                     meal.type === 'lunch' ? 'Almoço' : 
+                     meal.type === 'dinner' ? 'Jantar' : 'Lanche'}
+                  </p>
                 </div>
               </div>
             ))}

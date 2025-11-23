@@ -4,7 +4,6 @@ import { generateId } from './utils';
 
 const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
-// Inicializa o cliente OpenAI
 const openai = new OpenAI({
   apiKey: apiKey,
   dangerouslyAllowBrowser: true 
@@ -12,8 +11,8 @@ const openai = new OpenAI({
 
 export async function analyzeFoodImage(base64Image: string): Promise<Meal> {
   try {
-    if (!apiKey || apiKey.includes('YOUR_API_KEY') || apiKey.length < 10) {
-      throw new Error("Chave da API OpenAI inválida ou não configurada.");
+    if (!apiKey) {
+      throw new Error("Chave da API OpenAI não configurada.");
     }
 
     const response = await openai.chat.completions.create({
@@ -21,45 +20,37 @@ export async function analyzeFoodImage(base64Image: string): Promise<Meal> {
       messages: [
         {
           role: "system",
-          content: `Você é um nutricionista especializado em análise alimentar por imagem. 
-Sua tarefa é analisar cuidadosamente o alimento presente na imagem enviada.
+          content: `Você é um nutricionista especializado.
+Sua tarefa é analisar a imagem da refeição e retornar dados nutricionais precisos.
 
-Regras:
-1. Identifique cada comida ou ingrediente visível.
-2. Estime quantidades em gramas de cada item.
-3. Calcule:
-   - Calorias totais (kcal)
-   - Macronutrientes: carboidratos, proteínas, gorduras
-   - Fibras
-   - Açúcares
-   - Sódio
-4. Sempre forneça uma tabela final com todos os nutrientes.
-5. Seja preciso, objetivo e baseado em referência nutricional padrão (USDA ou TACO).
-6. Se a imagem for ruim, peça uma foto mais clara.
-7. Responda ESTRITAMENTE com um objeto JSON válido.
+REGRAS OBRIGATÓRIAS:
+1. O idioma de resposta deve ser **PORTUGUÊS DE PORTUGAL (PT-PT)**.
+2. Identifique os alimentos e estime as quantidades.
+3. Retorne APENAS um JSON válido.
+4. NÃO use termos em inglês nos valores visíveis.
 
-Formato do JSON esperado:
+Formato do JSON:
 {
-  "name": "Nome curto do prato",
-  "description": "Descrição detalhada com gramas de cada item identificado",
+  "name": "Nome curto do prato (ex: Bife com Batatas)",
+  "description": "Descrição curta dos ingredientes (ex: 150g de bife grelhado, 100g de batatas assadas)",
   "calories": número (total kcal),
   "macros": {
-    "protein": número (g),
-    "carbs": número (g),
-    "fat": número (g)
+    "protein": número (gramas de proteína),
+    "carbs": número (gramas de hidratos de carbono),
+    "fat": número (gramas de gordura)
   },
   "micros": {
     "Fibras": "valor (ex: 5g)",
     "Açúcares": "valor (ex: 2g)",
     "Sódio": "valor (ex: 150mg)"
   },
-  "error": "Mensagem de erro opcional se a imagem não for de comida ou estiver ilegível"
+  "error": "Mensagem de erro em português se a imagem não for clara"
 }`
         },
         {
           role: "user",
           content: [
-            { type: "text", text: "Analise esta refeição e forneça a tabela nutricional completa." },
+            { type: "text", text: "Analise esta refeição e forneça os dados nutricionais." },
             {
               type: "image_url",
               image_url: {
@@ -78,7 +69,7 @@ Formato do JSON esperado:
     const content = response.choices[0].message.content;
     
     if (!content) {
-      throw new Error("Sem resposta da IA");
+      throw new Error("Sem resposta da análise.");
     }
 
     const data = JSON.parse(content);
@@ -107,10 +98,10 @@ Formato do JSON esperado:
     console.error("Erro na análise OpenAI:", error);
     
     if (error.status === 401) {
-      throw new Error("Chave API inválida. Verifique a configuração.");
+      throw new Error("Erro de configuração de API.");
     }
     if (error.status === 429) {
-      throw new Error("Limite de uso da IA excedido (Quota). Verifique o plano da OpenAI.");
+      throw new Error("Limite de requisições excedido. Tente mais tarde.");
     }
     
     throw error;

@@ -24,7 +24,7 @@ export function calculateGoalCalories(tdee: number, bmr: number, goal: UserGoal)
   let targetCalories = tdee;
 
   if (goal === 'loss') {
-    // Déficit de 15% (média entre 10-20%)
+    // Déficit de 15%
     const deficit = tdee * 0.15;
     targetCalories = tdee - deficit;
 
@@ -33,7 +33,7 @@ export function calculateGoalCalories(tdee: number, bmr: number, goal: UserGoal)
       targetCalories = bmr;
     }
   } else if (goal === 'gain') {
-    // Superávit de 15% (média entre 10-20%)
+    // Superávit de 15%
     const surplus = tdee * 0.15;
     targetCalories = tdee + surplus;
   }
@@ -41,15 +41,23 @@ export function calculateGoalCalories(tdee: number, bmr: number, goal: UserGoal)
   return Math.round(targetCalories);
 }
 
+// Lista expandida de exercícios
 export const WORKOUT_TYPES = [
-  { id: 'walking', label: 'Caminhada Leve', mets: 3.5 },
-  { id: 'running_moderate', label: 'Corrida Moderada', mets: 8.0 },
-  { id: 'running_intense', label: 'Corrida Intensa', mets: 11.5 },
-  { id: 'weightlifting', label: 'Musculação', mets: 4.5 }, // Média geral
-  { id: 'hiit', label: 'HIIT', mets: 8.0 },
+  { id: 'walking', label: 'Caminhada', mets: 3.5 },
+  { id: 'running_moderate', label: 'Corrida', mets: 8.0 },
   { id: 'cycling', label: 'Ciclismo', mets: 7.5 },
-  { id: 'yoga', label: 'Yoga', mets: 2.5 },
-  { id: 'functional', label: 'Treino Funcional', mets: 6.0 },
+  { id: 'weightlifting', label: 'Musculação', mets: 4.5 },
+  { id: 'swimming', label: 'Natação', mets: 7.0 },
+  { id: 'yoga', label: 'Yoga / Pilates', mets: 3.0 },
+  { id: 'hiit', label: 'Treino HIIT', mets: 8.0 },
+  { id: 'boxing', label: 'Boxe / Artes Marciais', mets: 9.0 },
+  { id: 'dancing', label: 'Dança / Zumba', mets: 5.0 },
+  { id: 'sports', label: 'Futebol / Desporto', mets: 7.0 },
+  { id: 'crossfit', label: 'Crossfit', mets: 8.5 },
+  { id: 'cleaning', label: 'Limpeza / Tarefas', mets: 3.0 },
+  { id: 'hiking', label: 'Trilho / Caminhada', mets: 6.0 },
+  { id: 'tennis', label: 'Ténis / Padel', mets: 7.0 },
+  { id: 'basketball', label: 'Basquetebol', mets: 8.0 },
 ];
 
 export function calculateWorkoutCalories(weight: number, durationMinutes: number, workoutId: string): number {

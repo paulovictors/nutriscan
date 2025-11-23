@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { UserProfile, Meal, Workout, DailyStats } from '../types';
 import { calculateBMR, calculateTDEE } from '../lib/calculations';
-import { format } from 'date-fns';
+import { isSameDay, parseISO } from 'date-fns';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { generateId } from '../lib/utils';
 
@@ -15,8 +15,8 @@ interface AppContextType {
   logout: () => Promise<void>;
   meals: Meal[];
   workouts: Workout[];
-  addMeal: (meal: Meal) => void;
-  addWorkout: (workout: Workout) => void;
+  addMeal: (meal: Meal) => Promise<void>;
+  addWorkout: (workout: Workout) => Promise<void>;
   getDailyStats: (date: Date) => DailyStats;
   resetData: () => void;
   isDemoMode: boolean;
@@ -36,24 +36,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isMounted.current = true;
     
     const init = async () => {
-      // Timeout de segurança para garantir que a app abre mesmo se o Supabase falhar
       const safetyTimeout = setTimeout(() => {
         if (isMounted.current && isLoading) {
           console.warn("Inicialização demorou muito. Forçando entrada.");
           setIsLoading(false);
         }
-      }, 5000); // Reduzido para 5s para ser mais ágil
+      }, 5000);
 
       if (isSupabaseConfigured) {
-        // Limpar dados de demonstração antigos
         localStorage.removeItem('demo_user');
         
         try {
           const { data: { session }, error } = await supabase.auth.getSession();
 
-          if (error) {
-             console.warn("Erro ao verificar sessão:", error.message);
-          }
+          if (error) console.warn("Erro ao verificar sessão:", error.message);
 
           if (session?.user) {
             await loadUserData(session.user.id, session.user.email);
@@ -94,10 +90,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const { data } = supabase.auth.onAuthStateChange((event, session) => {
         if (!isMounted.current) return;
         
-        // CORREÇÃO DO LOOP: Usar setTimeout para evitar deadlock em operações async dentro do listener
         setTimeout(async () => {
             if (event === 'SIGNED_IN' && session?.user) {
-              // Só carrega se o usuário mudou ou se ainda não temos dados
               if (user?.id !== session.user.id) {
                 await loadUserData(session.user.id, session.user.email);
               }
@@ -147,7 +141,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.warn("Erro ao buscar perfil:", error.message);
-        // Se der erro, assumimos que é um user novo sem perfil
         setUser({ id: userId, email: email, isOnboarded: false } as UserProfile);
       } else if (profile) {
         setUser({
@@ -188,7 +181,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const mappedMeals: Meal[] = mealsData.map((m: any) => ({
           id: m.id,
           user_id: m.user_id,
-          date: m.created_at,
+          date: m.created_at, // Mantém ISO string
           name: m.description ? m.description.split(' | ')[0] : 'Refeição',
           description: m.description ? (m.description.split(' | ')[1] || m.description) : '',
           imageUrl: m.image_url,
@@ -323,7 +316,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     
     if (error) throw error;
-    // O listener onAuthStateChange tratará o resto
   };
 
   const logout = async () => {
@@ -335,7 +327,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addMeal = async (meal: Meal) => {
-    const newMeal = { ...meal, user_id: user?.id };
+    // Atualiza estado local imediatamente (Optimistic UI)
+    const newMeal = { ...meal, user_id: user?.id, date: new Date().toISOString() };
     const updatedMeals = [newMeal, ...meals];
     setMeals(updatedMeals);
     saveLocal('demo_meals', updatedMeals);
@@ -343,36 +336,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (isSupabaseConfigured && user?.id) {
       try {
         const combinedDescription = `${meal.name} | ${meal.description}`;
-        await supabase.from('meals').insert({
+        const { error } = await supabase.from('meals').insert({
           user_id: user.id,
           description: combinedDescription,
           image_url: meal.imageUrl,
           calories: meal.calories,
           macros: meal.macros,
           micronutrients: meal.micros,
-          created_at: new Date().toISOString()
+          created_at: newMeal.date
         });
+        
+        if (error) {
+            console.error("Erro Supabase addMeal:", error);
+            // Opcional: Reverter estado local se falhar
+        }
       } catch (e) {
-        console.error("Erro ao salvar refeição remota:", e);
+        console.error("Exceção ao salvar refeição remota:", e);
       }
     }
   };
 
   const addWorkout = async (workout: Workout) => {
-    const newWorkout = { ...workout, user_id: user?.id };
+    // Atualiza estado local imediatamente
+    const newWorkout = { ...workout, user_id: user?.id, date: new Date().toISOString() };
     const updatedWorkouts = [newWorkout, ...workouts];
     setWorkouts(updatedWorkouts);
     saveLocal('demo_workouts', updatedWorkouts);
 
     if (isSupabaseConfigured && user?.id) {
       try {
-        await supabase.from('workouts').insert({
+        const { error } = await supabase.from('workouts').insert({
           user_id: user.id,
           workout_type: workout.type,
           duration_min: workout.duration,
           kcal_burned: workout.caloriesBurned,
-          created_at: new Date().toISOString()
+          created_at: newWorkout.date
         });
+
+        if (error) console.error("Erro Supabase addWorkout:", error);
       } catch (e) {
         console.error("Erro ao salvar treino remoto:", e);
       }
@@ -380,11 +381,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const getDailyStats = (date: Date): DailyStats => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const isSameDay = (isoString: string) => isoString.startsWith(dateStr);
-
-    const daysMeals = meals.filter(m => isSameDay(m.date));
-    const daysWorkouts = workouts.filter(w => isSameDay(w.date));
+    // CORREÇÃO DE DATAS: Usa isSameDay para comparar corretamente a data local com o ISO string
+    const daysMeals = meals.filter(m => isSameDay(parseISO(m.date), date));
+    const daysWorkouts = workouts.filter(w => isSameDay(parseISO(w.date), date));
     
     const caloriesConsumed = daysMeals.reduce((acc, m) => acc + m.calories, 0);
     const caloriesBurned = daysWorkouts.reduce((acc, w) => acc + w.caloriesBurned, 0);
@@ -394,7 +393,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const fat = daysMeals.reduce((acc, m) => acc + (m.macros?.fat || 0), 0);
 
     return {
-      date: dateStr,
+      date: date.toISOString(),
       caloriesConsumed,
       caloriesBurned,
       netCalories: caloriesConsumed - caloriesBurned,
